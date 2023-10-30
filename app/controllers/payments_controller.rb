@@ -1,18 +1,18 @@
 class PaymentsController < ApplicationController
   def create
-    product = Product.find(params[:product_id])
-    payment_result = CloudPayment.proccess(
-      user_uid: current_user.cloud_payments_uid,
-      amount_cents: params[:amount] * 100,
-      currency: 'RUB'
-    )
+    purchase_result = Billing::Purchase.run!(purchase_params)
 
-    if payment_result[:status] == 'completed'
-      product_access = ProductAccess.create(user: current_user, product:)
-      OrderMailer.product_access_email(product_access).deliver_later
+    if purchase_result.success?
       redirect_to :successful_payment_path
     else
-      redirect_to :failed_payment_path, note: 'Что-то пошло не так'
+      redirect_to :failed_payment_path, note: purchase_result.error_message
     end
+  end
+
+  private
+
+  def purchase_params
+    params.permit(:product_id, :amount)
+          .merge(current_user: current_user)
   end
 end
