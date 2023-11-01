@@ -17,15 +17,16 @@ class Purchase < ApplicationInteractor
       product = yield find_product
       yield make_payment
       product_access = yield grant_access(product)
-      yield notify
-      yield deliver(product.weight)
     end
+    
+    yield notify
+    yield deliver(product.weight)
   end
 
   private
 
   def find_product
-    product = Product.find(product_id)
+    product = Product.find_by(id: product_id)
     product.present? ? Success(product) : Failure(:find_error)
   end
 
@@ -41,7 +42,7 @@ class Purchase < ApplicationInteractor
 
   def grant_access(prodcut)
     product_access = ProductAccess.create(user: current_user, product:)
-    product_access.present? ? Success(payment_result) : Failure(:access_error)
+    product_access.persisted? ? Success(payment_result) : Failure(:access_error)
   end
 
   def notify
