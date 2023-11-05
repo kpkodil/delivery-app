@@ -1,23 +1,76 @@
 class PrepareDelivery
-  TRUCKS = { kamaz: 3000, gazel: 1000 }
+  class DeliveryError < StandardError; end
+
+  TRUCKS = { kamaz: 3000, gazel: 1000 }.freeze
+  REQUIRED_ADDRESS_PARAMS = %w[house city street].freeze
+
+  ERROR_STATUS = "error".freeze
+
+  attr_reader :order, :user
 
   def initialize(order, user)
-    @order = order 
-    @user = user 
+    @order = order
+    @user = user
+    @result = initial_result
   end
 
   def perform(destination_address, delivery_date)
-    result = { truck: nil, weight: nil, order_number: @order.id, address: destination_address, status: :ok }
-    raise "Дата доставки уже прошла" if delivery_date < Time.current
-    raise "Нет адреса" if destination_address.city.empty? || destination_address.street.empty? || destination_address.house.empty?
+    validate_delivery_date!(delivery_date)
 
-    weight = @order.products.map(&:weight).sum
-    TRUCKS.keys.each { |key| result[:truck] = key if TRUCKS[key.to_sym] > weight }
-    raise "Нет машины" if result[:truck].nil?
+    validate_destination_address!(destination_address)
+    set_destination_address(destination_address)
 
+    validate_weight!
+    set_available_truck
+
+   rescue DeliveryError
+    result[:satus] = ERROR_STATUS
+   ensure
     result
-   rescue StandardError
-     result[:satus] = "error"
+  end
+
+  private
+
+  attr_reader :result
+
+  def initial_result
+    {
+      truck: nil,
+      weight: nil,
+      order_number: @order.id,
+      address: nil,
+      status: :ok
+    }
+  end
+
+  def validate_delivery_date!(delivery_date)
+    raise DeliveryError.new("Delivery is overdue") if delivery_date < Time.current
+  end
+
+  def validate_destination_address!(destination_address)
+    REQUIRED_ADDRESS_PARAMS.each do |addr|
+      raise DeliveryError.new("Invalid #{addr}") if destination_address.try(addr).blank?
+    end
+  end
+
+  def set_destination_address(destination_address)
+    result[:address] = destination_address
+  end
+
+  def validate_weight!
+    raise DeliveryError.new("No vehicles with a carrying capacity of more than #{weight}") unless available_truck.present?
+  end
+
+  def available_truck
+    @available_truck ||= TRUCKS.find { |_, v| v > weight }&.first
+  end
+
+  def weight
+    @weight ||= order.products.sum(&:weight)
+  end
+
+  def set_available_truck
+    result[:truck] = available_truck
   end
 end
 
